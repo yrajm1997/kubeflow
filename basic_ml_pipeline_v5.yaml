@@ -1,0 +1,293 @@
+# PIPELINE DEFINITION
+# Name: basic-ml-pipeline
+# Description: A simple pipeline for data preparation, training/test splitting, and model training.
+# Inputs:
+#    data_path: str [Default: '/data']
+components:
+  comp-inference-with-model:
+    executorLabel: exec-inference-with-model
+    inputDefinitions:
+      artifacts:
+        model_path:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+  comp-prepare-data:
+    executorLabel: exec-prepare-data
+    inputDefinitions:
+      parameters:
+        data_path:
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        final_df:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+  comp-train-test-splitting:
+    executorLabel: exec-train-test-splitting
+    inputDefinitions:
+      artifacts:
+        final_df:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+      parameters:
+        data_path:
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        X_test:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+        X_train:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+        y_test:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+        y_train:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+  comp-training-basic-classifier:
+    executorLabel: exec-training-basic-classifier
+    inputDefinitions:
+      artifacts:
+        X_train:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+        y_train:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+    outputDefinitions:
+      artifacts:
+        save_model:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+deploymentSpec:
+  executors:
+    exec-inference-with-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - inference_with_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.12.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'pandas' 'numpy'\
+          \ 'scikit-learn' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef inference_with_model(model_path: Input[Artifact]):\n    import\
+          \ pandas as pd\n    import numpy as np\n    # from sklearn.linear_model\
+          \ import LogisticRegression\n    import joblib\n\n    model = joblib.load(model_path.path)\n\
+          \    input_sample = np.array([[2.5, 3.5, 4.5, 5.5]])\n\n    pred = model.predict(input_sample)\n\
+          \    print(pred)\n\n"
+        image: python:3.10-slim
+    exec-prepare-data:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - prepare_data
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.12.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'pandas' 'numpy'\
+          \ 'scikit-learn' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef prepare_data(data_path: str, final_df: Output[Artifact]):\n \
+          \   import pandas as pd\n    from sklearn import datasets\n\n    # Load\
+          \ dataset\n    iris = datasets.load_iris()\n    df = pd.DataFrame(iris.data,\
+          \ columns=iris.feature_names)\n    df['species'] = iris.target\n\n    df\
+          \ = df.dropna()\n    df.to_csv(final_df.path, index=False)\n\n"
+        image: python:3.10-slim
+    exec-train-test-splitting:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train_test_splitting
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.12.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'pandas' 'numpy'\
+          \ 'scikit-learn' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train_test_splitting(final_df: Input[Artifact], data_path: str,\
+          \ X_train: Output[Artifact], X_test: Output[Artifact], y_train: Output[Artifact],\
+          \ y_test: Output[Artifact]):\n    import pandas as pd\n    import numpy\
+          \ as np\n    from sklearn.model_selection import train_test_split\n\n  \
+          \  final_data = pd.read_csv(final_df.path)\n\n    target_column = 'species'\n\
+          \    X = final_data.loc[:, final_data.columns != target_column]\n    y =\
+          \ final_data.loc[:, final_data.columns == target_column]\n\n    X_train_data,\
+          \ X_test_data, y_train_data, y_test_data = train_test_split(X, y, test_size=0.3,\
+          \ stratify=y, random_state=47)\n\n    X_train_data.to_csv(X_train.path,\
+          \ index=False)\n    X_test_data.to_csv(X_test.path, index=False)\n    y_train_data.to_csv(y_train.path,\
+          \ index=False)\n    y_test_data.to_csv(y_test.path, index=False)\n\n"
+        image: python:3.10-slim
+    exec-training-basic-classifier:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - training_basic_classifier
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.12.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'pandas' 'numpy'\
+          \ 'scikit-learn' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef training_basic_classifier(X_train: Input[Artifact], y_train:\
+          \ Input[Artifact], save_model: Output[Artifact]):\n    import pandas as\
+          \ pd\n    import numpy as np\n    from sklearn.linear_model import LogisticRegression\n\
+          \    import joblib\n\n    X_train_data = pd.read_csv(X_train.path)\n   \
+          \ y_train_data = pd.read_csv(y_train.path)\n\n    classifier = LogisticRegression(max_iter=500)\n\
+          \    classifier.fit(X_train_data, y_train_data)\n\n    joblib.dump(classifier,\
+          \ save_model.path)\n\n"
+        image: python:3.10-slim
+pipelineInfo:
+  description: A simple pipeline for data preparation, training/test splitting, and
+    model training.
+  name: basic-ml-pipeline
+root:
+  dag:
+    tasks:
+      inference-with-model:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-inference-with-model
+        dependentTasks:
+        - training-basic-classifier
+        inputs:
+          artifacts:
+            model_path:
+              taskOutputArtifact:
+                outputArtifactKey: save_model
+                producerTask: training-basic-classifier
+        taskInfo:
+          name: inference-with-model
+      prepare-data:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-prepare-data
+        inputs:
+          parameters:
+            data_path:
+              componentInputParameter: data_path
+        taskInfo:
+          name: prepare-data
+      train-test-splitting:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-train-test-splitting
+        dependentTasks:
+        - prepare-data
+        inputs:
+          artifacts:
+            final_df:
+              taskOutputArtifact:
+                outputArtifactKey: final_df
+                producerTask: prepare-data
+          parameters:
+            data_path:
+              componentInputParameter: data_path
+        taskInfo:
+          name: train-test-splitting
+      training-basic-classifier:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-training-basic-classifier
+        dependentTasks:
+        - train-test-splitting
+        inputs:
+          artifacts:
+            X_train:
+              taskOutputArtifact:
+                outputArtifactKey: X_train
+                producerTask: train-test-splitting
+            y_train:
+              taskOutputArtifact:
+                outputArtifactKey: y_train
+                producerTask: train-test-splitting
+        taskInfo:
+          name: training-basic-classifier
+  inputDefinitions:
+    parameters:
+      data_path:
+        defaultValue: /data
+        isOptional: true
+        parameterType: STRING
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.12.1
